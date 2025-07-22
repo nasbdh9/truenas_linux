@@ -47,6 +47,10 @@
 #include "trace.h"
 
 #define NFSDDBG_FACILITY		NFSDDBG_FILEOP
+// ---- MCG DEBUG ----
+#undef pr_fmt
+#define pr_fmt(fmt) "%s:%s: " fmt, KBUILD_MODNAME, __func__
+//
 
 /**
  * nfserrno - Map Linux errnos to NFS errnos
@@ -2193,6 +2197,7 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t *offsetp,
 	struct file	*file;
 	loff_t		offset = *offsetp;
 	int             may_flags = NFSD_MAY_READ;
+	#define IOCB_MCG (1 << 30)
 
 	err = nfsd_open(rqstp, fhp, S_IFDIR, may_flags, &file);
 	if (err)
@@ -2209,7 +2214,10 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t *offsetp,
 		goto out_close;
 	}
 
+        pr_info("MCG DEBUG: call nfsd_buffered_readdir: file=%s\n",file->f_path.dentry->d_name.name);
+        if (strstr(file->f_path.dentry->d_name.name, "now")) { file->f_iocb_flags |= IOCB_MCG; }	// MCG DEBUG
 	err = nfsd_buffered_readdir(file, fhp, func, cdp, offsetp);
+	file->f_iocb_flags &= !IOCB_MCG;	// MCG DEBUG
 
 	if (err == nfserr_eof || err == nfserr_toosmall)
 		err = nfs_ok; /* can still be found in ->err */
