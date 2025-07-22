@@ -28,6 +28,10 @@
 #include <linux/uaccess.h>
 
 #include "internal.h"
+// ---- MCG DEBUG ----
+#undef pr_fmt
+#define pr_fmt(fmt) "%s:%s: " fmt, KBUILD_MODNAME, __func__
+// -------------------
 
 int simple_getattr(struct mnt_idmap *idmap, const struct path *path,
 		   struct kstat *stat, u32 request_mask,
@@ -192,6 +196,7 @@ int dcache_readdir(struct file *file, struct dir_context *ctx)
 	struct dentry *cursor = file->private_data;
 	struct dentry *next = NULL;
 	struct hlist_node **p;
+	pr_info("MCG DEBUG: ENTER dcache_readdir for iterate_shared(%pD2)\n",file);
 
 	if (!dir_emit_dots(file, ctx))
 		return 0;
@@ -562,6 +567,7 @@ out_eod:
 static int offset_readdir(struct file *file, struct dir_context *ctx)
 {
 	struct dentry *dir = file->f_path.dentry;
+	pr_info("MCG DEBUG: offset_readdir as iterate_shared(%pD2)\n",file);
 
 	lockdep_assert_held(&d_inode(dir)->i_rwsem);
 
@@ -1740,6 +1746,7 @@ static loff_t empty_dir_llseek(struct file *file, loff_t offset, int whence)
 static int empty_dir_readdir(struct file *file, struct dir_context *ctx)
 {
 	dir_emit_dots(file, ctx);
+	pr_info("MCG DEBUG: empty_dir_readdir as iterate_shared(%pD2)\n",file);
 	return 0;
 }
 

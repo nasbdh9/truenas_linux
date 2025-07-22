@@ -22,6 +22,10 @@
 #include <linux/compat.h>
 #include <linux/uaccess.h>
 
+// ---- MCG DEBUG ----
+#undef pr_fmt
+#define pr_fmt(fmt) "%s:%s: " fmt, KBUILD_MODNAME, __func__
+// -------------------
 /*
  * Some filesystems were never converted to '->iterate_shared()'
  * and their directory iterators want the inode lock held for
@@ -87,8 +91,10 @@ int iterate_dir(struct file *file, struct dir_context *ctx)
 	struct inode *inode = file_inode(file);
 	int res = -ENOTDIR;
 
-	if (!file->f_op->iterate_shared)
+	if (!file->f_op->iterate_shared) {
+		pr_info("MCG DEBUG: !!!! iterate_shared not defined for %pD2 !!!!\n",file);
 		goto out;
+	}
 
 	res = security_file_permission(file, MAY_READ);
 	if (res)
@@ -103,9 +109,12 @@ int iterate_dir(struct file *file, struct dir_context *ctx)
 		goto out;
 
 	res = -ENOENT;
+	pr_info("MCG DEBUG: passed permissions checks\n");
 	if (!IS_DEADDIR(inode)) {
 		ctx->pos = file->f_pos;
+		pr_info("MCG DEBUG: --> calling iterate_shared for %pD2\n", file);
 		res = file->f_op->iterate_shared(file, ctx);
+		pr_info("MCG DEBUG: <-- return  iterate_shared, res=%d\n",res);
 		file->f_pos = ctx->pos;
 		fsnotify_access(file);
 		file_accessed(file);
@@ -283,6 +292,7 @@ static bool filldir(struct dir_context *ctx, const char *name, int namlen,
 	if (prev_reclen && signal_pending(current))
 		return false;
 	dirent = buf->current_dir;
+	pr_info("MCG DEBUG: processing %s\n",dirent->d_name);
 	prev = (void __user *) dirent - prev_reclen;
 	if (!user_write_access_begin(prev, reclen + prev_reclen))
 		goto efault;
@@ -365,6 +375,7 @@ static bool filldir64(struct dir_context *ctx, const char *name, int namlen,
 	if (prev_reclen && signal_pending(current))
 		return false;
 	dirent = buf->current_dir;
+	pr_info("MCG DEBUG: processing %s\n",dirent->d_name);
 	prev = (void __user *)dirent - prev_reclen;
 	if (!user_write_access_begin(prev, reclen + prev_reclen))
 		goto efault;

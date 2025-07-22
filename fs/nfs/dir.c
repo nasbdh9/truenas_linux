@@ -49,6 +49,10 @@
 #include "nfstrace.h"
 
 /* #define NFS_DEBUG_VERBOSE 1 */
+// ---- MCG DEBUG ----
+#undef pr_fmt
+#define pr_fmt(fmt) "%s:%s: " fmt, KBUILD_MODNAME, __func__
+// -------------------
 
 static int nfs_opendir(struct inode *, struct file *);
 static int nfs_closedir(struct inode *, struct file *);
@@ -1103,6 +1107,7 @@ static void nfs_do_filldir(struct nfs_readdir_descriptor *desc,
 		}
 
 		ent = &array->array[i];
+		pr_info("MCG DEBUG: adding %s\n",ent->name);
 		if (!dir_emit(desc->ctx, ent->name, ent->name_len,
 		    nfs_compat_user_ino64(ent->ino), ent->d_type)) {
 			desc->eob = true;
@@ -1147,6 +1152,7 @@ static int uncached_readdir(struct nfs_readdir_descriptor *desc)
 	size_t		i, sz = 512;
 	__be32		verf[NFS_DIR_VERIFIER_SIZE];
 	int		status = -ENOMEM;
+	pr_info("MCG DEBUG: called uncached_readdir for %s\n",desc->file->f_path.dentry->d_iname);
 
 	dfprintk(DIRCACHE, "NFS: uncached_readdir() searching for cookie %llu\n",
 			(unsigned long long)desc->dir_cookie);
@@ -1169,6 +1175,7 @@ static int uncached_readdir(struct nfs_readdir_descriptor *desc)
 	status = nfs_readdir_xdr_to_array(desc, desc->verf, verf, arrays, sz);
 	if (status < 0) {
 		trace_nfs_readdir_uncached_done(file_inode(desc->file), status);
+		pr_info("MCG DEBUG: ERROR return from nfs_readdir_xdr_to_array(%pD2) = %d\n",desc->file, status);
 		goto out_free;
 	}
 
@@ -1228,6 +1235,7 @@ static int nfs_readdir(struct file *file, struct dir_context *ctx)
 	unsigned int cache_hits, cache_misses;
 	bool force_clear;
 	int res;
+	pr_info("MCG DEBUG: nfs_readdir as iterate_shared(%pD2)\n",file);
 
 	dfprintk(FILE, "NFS: readdir(%pD2) starting at cookie %llu\n",
 			file, (long long)ctx->pos);
@@ -1297,6 +1305,7 @@ static int nfs_readdir(struct file *file, struct dir_context *ctx)
 		if (res < 0)
 			break;
 
+		pr_info("MCG DEBUG: call nfs_do_filldir(%pD2)\n",desc->file);
 		nfs_do_filldir(desc, nfsi->cookieverf);
 		nfs_readdir_folio_unlock_and_put_cached(desc);
 		if (desc->folio_index == desc->folio_index_max)

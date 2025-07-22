@@ -50,7 +50,7 @@
 // ---- MCG DEBUG ----
 #undef pr_fmt
 #define pr_fmt(fmt) "%s:%s: " fmt, KBUILD_MODNAME, __func__
-//
+// -------------------
 
 /**
  * nfserrno - Map Linux errnos to NFS errnos
@@ -2095,6 +2095,7 @@ static bool nfsd_buffered_filldir(struct dir_context *ctx, const char *name,
 	de->offset = offset;
 	de->ino = ino;
 	de->d_type = d_type;
+	pr_info("MCG DEBUG: Adding %s\n",name);
 	memcpy(de->name, name, namlen);
 	buf->used += reclen;
 
@@ -2119,14 +2120,26 @@ static __be32 nfsd_buffered_readdir(struct file *file, struct svc_fh *fhp,
 
 	offset = *offsetp;
 
+	pr_info("MCG DEBUG: ------- start while readdir loop -------\n");
 	while (1) {
+
 		unsigned int reclen;
+		char mcgstr[64] = {0};  // MCG DEBUG
 
 		cdp->err = nfserr_eof; /* will be cleared on successful read */
 		buf.used = 0;
 		buf.full = 0;
 
+//struct buffered_dirent {
+//        u64             ino;
+//        loff_t          offset;
+//        int             namlen;
+//        unsigned int    d_type;
+//        char            name[];
+//};
+		pr_info("MCG DEBUG: --> calling iterate_dir(%pD2)\n",file);
 		host_err = iterate_dir(file, &buf.ctx);
+		pr_info("MCG DEBUG: <-- return iterate_dir(%pD2), host_err=%d, size=%lu, full=%d\n",file, host_err, buf.used, buf.full);
 		if (buf.full)
 			host_err = 0;
 
@@ -2139,9 +2152,11 @@ static __be32 nfsd_buffered_readdir(struct file *file, struct svc_fh *fhp,
 			break;
 
 		de = (struct buffered_dirent *)buf.dirent;
+		pr_info("MCG DEBUG:     process '%s', offset=%llu\n",(char*)memcpy(mcgstr,de->name,de->namlen), offset);
 		while (size > 0) {
 			offset = de->offset;
 
+			pr_info("MCG DEBUG: call filldir func with %s\n",mcgstr);
 			if (func(cdp, de->name, de->namlen, de->offset,
 				 de->ino, de->d_type))
 				break;
@@ -2156,11 +2171,17 @@ static __be32 nfsd_buffered_readdir(struct file *file, struct svc_fh *fhp,
 			size -= reclen;
 			de = (struct buffered_dirent *)((char *)de + reclen);
 		}
-		if (size > 0) /* We bailed out early */
+		//if (size > 0) /* We bailed out early */
+		//	break;
+		if (size > 0) { /* We bailed out early */
+			pr_info("MCG DEBUG: size = %d.  Early bailout\n",size);
 			break;
+		}
+		pr_info("MCG DEBUG: size = %d\n",size);
 
 		offset = vfs_llseek(file, 0, SEEK_CUR);
 	}
+	pr_info("MCG DEBUG: ------- end while readdir loop -------\n");
 
 	free_page((unsigned long)(buf.dirent));
 
@@ -2197,11 +2218,15 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t *offsetp,
 	struct file	*file;
 	loff_t		offset = *offsetp;
 	int             may_flags = NFSD_MAY_READ;
-	#define IOCB_MCG (1 << 30)
 
+	pr_info("MCG DEBUG: open dir %pd3\n\n",fhp->fh_dentry);
 	err = nfsd_open(rqstp, fhp, S_IFDIR, may_flags, &file);
-	if (err)
+	//if (err)
+	//	goto out;
+	if (err) {
+		pr_info("MCG DEBUG: FAIL nfsd_open, err = %d\n",err);
 		goto out;
+	}
 
 	if (fhp->fh_64bit_cookies)
 		file->f_mode |= FMODE_64BITHASH;
@@ -2214,10 +2239,9 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t *offsetp,
 		goto out_close;
 	}
 
-        pr_info("MCG DEBUG: call nfsd_buffered_readdir: file=%s\n",file->f_path.dentry->d_name.name);
-        if (strstr(file->f_path.dentry->d_name.name, "now")) { file->f_iocb_flags |= IOCB_MCG; }	// MCG DEBUG
+	pr_info("MCG DEBUG: call nfsd_buffered_readdir(%pD2)\n",file);
 	err = nfsd_buffered_readdir(file, fhp, func, cdp, offsetp);
-	file->f_iocb_flags &= !IOCB_MCG;	// MCG DEBUG
+	pr_info("MCG DEBUG: nfsd_buffered_readdir response = %d\n\n",err);
 
 	if (err == nfserr_eof || err == nfserr_toosmall)
 		err = nfs_ok; /* can still be found in ->err */
