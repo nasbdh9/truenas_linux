@@ -2221,12 +2221,8 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t *offsetp,
 
 	pr_info("MCG DEBUG: open dir %pd3\n\n",fhp->fh_dentry);
 	err = nfsd_open(rqstp, fhp, S_IFDIR, may_flags, &file);
-	//if (err)
-	//	goto out;
-	if (err) {
-		pr_info("MCG DEBUG: FAIL nfsd_open, err = %d\n",err);
+	if (err)
 		goto out;
-	}
 
 	if (fhp->fh_64bit_cookies)
 		file->f_mode |= FMODE_64BITHASH;

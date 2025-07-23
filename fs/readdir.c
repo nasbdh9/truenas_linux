@@ -292,7 +292,6 @@ static bool filldir(struct dir_context *ctx, const char *name, int namlen,
 	if (prev_reclen && signal_pending(current))
 		return false;
 	dirent = buf->current_dir;
-	pr_info("MCG DEBUG: processing %s\n",dirent->d_name);
 	prev = (void __user *) dirent - prev_reclen;
 	if (!user_write_access_begin(prev, reclen + prev_reclen))
 		goto efault;
@@ -375,7 +374,6 @@ static bool filldir64(struct dir_context *ctx, const char *name, int namlen,
 	if (prev_reclen && signal_pending(current))
 		return false;
 	dirent = buf->current_dir;
-	pr_info("MCG DEBUG: processing %s\n",dirent->d_name);
 	prev = (void __user *)dirent - prev_reclen;
 	if (!user_write_access_begin(prev, reclen + prev_reclen))
 		goto efault;
