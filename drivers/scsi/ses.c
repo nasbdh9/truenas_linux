@@ -10,6 +10,8 @@
 #include <linux/kernel.h>
 #include <linux/enclosure.h>
 #include <linux/unaligned.h>
+#include <linux/pci.h>
+#include <linux/device/bus.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_cmnd.h>
@@ -22,6 +24,9 @@
 
 #include <linux/libata.h>
 #include "../ata/ahci.h"
+
+/* PCIe protocol identifier for SES Additional Element Status */
+#define SES_PROTOCOL_PCIE	0xb
 
 struct ses_device {
 	unsigned char *page1;
@@ -474,7 +479,7 @@ static int ses_process_descriptor(struct enclosure_component *ecomp,
 {
 	int eip = desc[0] & 0x10;
 	int invalid = desc[0] & 0x80;
-	enum scsi_protocol proto = desc[0] & 0x0f;
+	enum scsi_protocol proto = desc[0] & 0xf;
 	u64 addr = 0;
 	int slot = -1;
 	struct ses_component *scomp = ecomp->scratch;
@@ -485,7 +490,7 @@ static int ses_process_descriptor(struct enclosure_component *ecomp,
 		return 0;
 	}
 
-	switch (proto) {
+	switch ((int)proto) {
 	case SCSI_PROTOCOL_ATA:
 		d = desc + 4;
 		if (eip) {
@@ -526,6 +531,27 @@ static int ses_process_descriptor(struct enclosure_component *ecomp,
 			(u64)d[17] << 16 |
 			(u64)d[18] << 8 |
 			(u64)d[19];
+		break;
+	case SES_PROTOCOL_PCIE:
+		if (!eip || max_desc_len < 76)
+			return 1;
+
+		d = desc + 4;
+		u8 num_ports = d[0];
+
+		if (num_ports == 0 || (d[1] & 0xE0) != 0x20)
+			return 1;
+
+		slot = d[3];
+		unsigned char *port_desc = d + 68;
+
+		if (port_desc[0] & 0x02) {
+			u16 bus = port_desc[4];
+			u8 devfn = port_desc[5];
+			u16 device = PCI_SLOT(devfn);
+			u16 function = PCI_FUNC(devfn);
+			addr = ((u64)bus << 16) | ((u64)device << 8) | function;
+		}
 		break;
 	default:
 		/* FIXME: Need to add more protocols than just SAS */
@@ -684,6 +710,24 @@ static void ses_enclosure_data_process(struct enclosure_device *edev,
 	kfree(hdr_buf);
 }
 
+static void ses_match_nvme_to_enclosure(struct enclosure_device *edev, struct pci_dev *pdev)
+{
+	struct scsi_device *edev_sdev = to_scsi_device(edev->edev.parent);
+	struct efd efd = {
+		.addr = 0,
+	};
+
+	ses_enclosure_data_process(edev, edev_sdev, 0);
+	if (pdev->dev.bus == &pci_bus_type) {
+		efd.addr = ((u64)pdev->bus->number << 16) |
+			   ((u64)PCI_SLOT(pdev->devfn) << 8) |
+			   PCI_FUNC(pdev->devfn);
+		efd.dev = &pdev->dev;
+	}
+
+	ses_enclosure_find_by_addr(edev, &efd);
+}
+
 static void ses_match_to_enclosure(struct enclosure_device *edev,
 				   struct scsi_device *sdev,
 				   int refresh)
@@ -743,6 +787,11 @@ static int poll_task_cb(void *arg)
 				continue;
 			ses_match_to_enclosure(edev, tmp_sdev, 1);
 		}
+
+		struct pci_dev *pdev = NULL;
+		while ((pdev = pci_get_class(PCI_CLASS_STORAGE_EXPRESS, pdev)) != NULL)
+			ses_match_nvme_to_enclosure(edev, pdev);
+
 		if (!kthread_should_stop()) {
 			schedule_timeout_interruptible(
 				    msecs_to_jiffies(SES_POLL_PERIOD_S * 1000));
@@ -1023,6 +1072,44 @@ static struct scsi_driver ses_template = {
 	},
 };
 
+/* NVMe hotplug support */
+static int match_nvme_to_enclosure(struct enclosure_device *edev, void *data)
+{
+	struct pci_dev *pdev = (struct pci_dev *)data;
+	ses_match_nvme_to_enclosure(edev, pdev);
+	return 0; /* Continue iteration */
+}
+
+static int remove_nvme_from_enclosure(struct enclosure_device *edev, void *data)
+{
+	struct pci_dev *pdev = (struct pci_dev *)data;
+	enclosure_remove_device(edev, &pdev->dev);
+	return 0; /* Continue iteration */
+}
+
+static int nvme_ses_notify(struct notifier_block *nb, unsigned long action, void *data)
+{
+	struct device *dev = data;
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	if (pdev->class != PCI_CLASS_STORAGE_EXPRESS)
+		return NOTIFY_DONE;
+
+	switch (action) {
+	case BUS_NOTIFY_ADD_DEVICE:
+		enclosure_for_each_device(match_nvme_to_enclosure, pdev);
+		break;
+	case BUS_NOTIFY_DEL_DEVICE:
+		enclosure_for_each_device(remove_nvme_from_enclosure, pdev);
+		break;
+	}
+	return NOTIFY_OK;
+}
+
+static struct notifier_block nvme_ses_notifier = {
+	.notifier_call = nvme_ses_notify,
+};
+
 static int __init ses_init(void)
 {
 	int err;
@@ -1035,8 +1122,14 @@ static int __init ses_init(void)
 	if (err)
 		goto out_unreg;
 
+	err = bus_register_notifier(&pci_bus_type, &nvme_ses_notifier);
+	if (err)
+		goto out_unreg_driver;
+
 	return 0;
 
+ out_unreg_driver:
+	scsi_unregister_driver(&ses_template.gendrv);
  out_unreg:
 	scsi_unregister_interface(&ses_interface);
 	return err;
@@ -1044,6 +1137,7 @@ static int __init ses_init(void)
 
 static void __exit ses_exit(void)
 {
+	bus_unregister_notifier(&pci_bus_type, &nvme_ses_notifier);
 	scsi_unregister_driver(&ses_template.gendrv);
 	scsi_unregister_interface(&ses_interface);
 }
