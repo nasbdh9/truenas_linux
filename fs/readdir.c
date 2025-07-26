@@ -90,9 +90,13 @@ int iterate_dir(struct file *file, struct dir_context *ctx)
 {
 	struct inode *inode = file_inode(file);
 	int res = -ENOTDIR;
+	char mcgbuf[64] = {0};
+	int mcgdbg = 0
+	snprintf(mcgbuf, 63, "%pD2", file);
+	if (strstr(mcgbuf, "now") != NULL) mcgdbg = 1;
 
 	if (!file->f_op->iterate_shared) {
-		pr_info("MCG DEBUG: !!!! iterate_shared not defined for %pD2 !!!!\n",file);
+		pr_info("MCG DEBUG: !!!! iterate_shared not defined for %s !!!!\n",mcgbuf);
 		goto out;
 	}
 
@@ -109,12 +113,12 @@ int iterate_dir(struct file *file, struct dir_context *ctx)
 		goto out;
 
 	res = -ENOENT;
-	pr_info("MCG DEBUG: passed permissions checks\n");
+	if (mcgdbg) pr_info("MCG DEBUG: passed permissions checks: %s\n", mcgbuf);
 	if (!IS_DEADDIR(inode)) {
 		ctx->pos = file->f_pos;
-		pr_info("MCG DEBUG: --> calling iterate_shared for %pD2\n", file);
+		if (mcgdbg) pr_info("MCG DEBUG: --> calling iterate_shared for %s\n", mcgbuf);
 		res = file->f_op->iterate_shared(file, ctx);
-		pr_info("MCG DEBUG: <-- return  iterate_shared, res=%d\n",res);
+		if (res != 0)	pr_info("MCG DEBUG: <-- return  iterate_shared, res=%d\n",res);
 		file->f_pos = ctx->pos;
 		fsnotify_access(file);
 		file_accessed(file);
