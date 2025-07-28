@@ -92,7 +92,7 @@ int iterate_dir(struct file *file, struct dir_context *ctx)
 	int res = -ENOTDIR;
 	/* MCG DEBUG */
 	//char mcgbuf[64] = {0};
-	int mcgdbg = 0
+	int mcgdbg = 0;
 	// pr_info("MCG DEBUG: called uncached_readdir for %s\n",desc->file->f_path.dentry->d_iname);
 	//memcpy(mcgstr,file->f_path.dentry,de->namlen), offset);
 	//memcpy(mcgbuf, file->
