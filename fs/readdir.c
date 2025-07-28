@@ -90,13 +90,17 @@ int iterate_dir(struct file *file, struct dir_context *ctx)
 {
 	struct inode *inode = file_inode(file);
 	int res = -ENOTDIR;
-	char mcgbuf[64] = {0};
+	/* MCG DEBUG */
+	//char mcgbuf[64] = {0};
 	int mcgdbg = 0
-	snprintf(mcgbuf, 63, "%pD2", file);
-	if (strstr(mcgbuf, "now") != NULL) mcgdbg = 1;
+	// pr_info("MCG DEBUG: called uncached_readdir for %s\n",desc->file->f_path.dentry->d_iname);
+	//memcpy(mcgstr,file->f_path.dentry,de->namlen), offset);
+	//memcpy(mcgbuf, file->
+	//snprintf(mcgbuf, 63, "%pD2", file);
+	if (strstr(file->f_path.dentry->d_iname, "now") != NULL) mcgdbg = 1;
 
 	if (!file->f_op->iterate_shared) {
-		pr_info("MCG DEBUG: !!!! iterate_shared not defined for %s !!!!\n",mcgbuf);
+		pr_info("MCG DEBUG: !!!! iterate_shared not defined for %s !!!!\n",file->f_path.dentry->d_iname);
 		goto out;
 	}
 
@@ -113,10 +117,10 @@ int iterate_dir(struct file *file, struct dir_context *ctx)
 		goto out;
 
 	res = -ENOENT;
-	if (mcgdbg) pr_info("MCG DEBUG: passed permissions checks: %s\n", mcgbuf);
+	if (mcgdbg) pr_info("MCG DEBUG: passed permissions checks: %s\n", file->f_path.dentry->d_iname);
 	if (!IS_DEADDIR(inode)) {
 		ctx->pos = file->f_pos;
-		if (mcgdbg) pr_info("MCG DEBUG: --> calling iterate_shared for %s\n", mcgbuf);
+		if (mcgdbg) pr_info("MCG DEBUG: --> calling iterate_shared for %s\n", file->f_path.dentry->d_iname);
 		res = file->f_op->iterate_shared(file, ctx);
 		if (res != 0)	pr_info("MCG DEBUG: <-- return  iterate_shared, res=%d\n",res);
 		file->f_pos = ctx->pos;
