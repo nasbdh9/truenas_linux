@@ -230,7 +230,7 @@ int dcache_readdir(struct file *file, struct dir_context *ctx)
 	spin_unlock(&dentry->d_lock);
 	dput(next);
 
-	pr_info("MCG DEBUG: EXIT dcache_readdir
+	pr_info("MCG DEBUG: EXIT dcache_readdir\n");
 	return 0;
 }
 EXPORT_SYMBOL(dcache_readdir);
