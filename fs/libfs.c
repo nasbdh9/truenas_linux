@@ -197,12 +197,12 @@ int dcache_readdir(struct file *file, struct dir_context *ctx)
 	struct dentry *cursor = file->private_data;
 	struct dentry *next = NULL;
 	struct hlist_node **p;
-	pr_info("MCG DEBUG: ENTER dcache_readdir for iterate_shared(%pD2), ctx->pos = %d\n",file, ctx->pos);
+	pr_info("MCG DEBUG: ENTER dcache_readdir for iterate_shared(%pD2), ctx->pos = %lld\n",file, ctx->pos);
 
 	if (!dir_emit_dots(file, ctx))
 		return 0;
 	else /* MCG DEBUG */
-		pr_info("MCG DEBUG: Added . and .., ctx->pos = %d\n", ctx->pos);
+		pr_info("MCG DEBUG: Added . and .., ctx->pos = %lld\n", ctx->pos);
 
 	if (ctx->pos == 2)
 		p = &dentry->d_children.first;
