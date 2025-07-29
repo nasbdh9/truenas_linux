@@ -114,6 +114,7 @@ static struct dentry *scan_positives(struct dentry *cursor,
 					struct dentry *last)
 {
 	struct dentry *dentry = cursor->d_parent, *found = NULL;
+	pr_info("MCG DEBUG:     --> *p=%p,  cursor=%pD2\n",*p, cursor);
 
 	spin_lock(&dentry->d_lock);
 	while (*p) {
@@ -144,6 +145,7 @@ static struct dentry *scan_positives(struct dentry *cursor,
 	}
 	spin_unlock(&dentry->d_lock);
 	dput(last);
+	pr_info("MCG DEBUG:     <-- last=%pD2, found=%pD2\n",last, found);
 	return found;
 }
 
@@ -197,7 +199,7 @@ int dcache_readdir(struct file *file, struct dir_context *ctx)
 	struct dentry *cursor = file->private_data;
 	struct dentry *next = NULL;
 	struct hlist_node **p;
-	pr_info("MCG DEBUG: ENTER dcache_readdir for iterate_shared(%pD2), ctx->pos = %lld\n",file, ctx->pos);
+	pr_info("MCG DEBUG: ENTER dcache_readdir for iterate_shared(%pD2), ctx->pos=%lld\n",file, ctx->pos);
 
 	if (!dir_emit_dots(file, ctx))
 		return 0;
@@ -209,8 +211,9 @@ int dcache_readdir(struct file *file, struct dir_context *ctx)
 	else
 		p = &cursor->d_sib.next;
 
+	pr_info("MCG DEBUG: into scan_positives(cursor=%pD2)\n",cursor);
 	while ((next = scan_positives(cursor, p, 1, next)) != NULL) {
-		pr_info("MCG DEBUG: adding dir entry %s\n", next->d_iname);
+		pr_info("MCG DEBUG: sp loop: adding dir entry %s\n", next->d_iname);
 		if (!dir_emit(ctx, next->d_name.name, next->d_name.len,
 			      d_inode(next)->i_ino,
 			      fs_umode_to_dtype(d_inode(next)->i_mode)))
