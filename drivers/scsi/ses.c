@@ -41,6 +41,7 @@ struct ses_device {
 
 struct ses_component {
 	u64 addr;
+	int protocol;
 };
 
 static bool ses_page2_supported(struct enclosure_device *edev)
@@ -487,6 +488,7 @@ static int ses_process_descriptor(struct enclosure_component *ecomp,
 
 	if (invalid) {
 		scomp->addr = 0;
+		scomp->protocol = -1;
 		return 0;
 	}
 
@@ -559,6 +561,7 @@ static int ses_process_descriptor(struct enclosure_component *ecomp,
 	}
 	ecomp->slot = slot;
 	scomp->addr = addr;
+	scomp->protocol = proto;
 
 	return 0;
 }
@@ -566,6 +569,7 @@ static int ses_process_descriptor(struct enclosure_component *ecomp,
 struct efd {
 	u64 addr;
 	struct device *dev;
+	int protocol;
 };
 
 static int ses_enclosure_find_by_addr(struct enclosure_device *edev,
@@ -577,7 +581,7 @@ static int ses_enclosure_find_by_addr(struct enclosure_device *edev,
 
 	for (i = 0; i < edev->components; i++) {
 		scomp = edev->component[i].scratch;
-		if (scomp->addr != efd->addr)
+		if (scomp->protocol != efd->protocol || scomp->addr != efd->addr)
 			continue;
 
 		if (enclosure_add_device(edev, i, efd->dev) == 0)
@@ -715,6 +719,7 @@ static void ses_match_nvme_to_enclosure(struct enclosure_device *edev, struct pc
 	struct scsi_device *edev_sdev = to_scsi_device(edev->edev.parent);
 	struct efd efd = {
 		.addr = 0,
+		.protocol = -1,
 	};
 
 	ses_enclosure_data_process(edev, edev_sdev, 0);
@@ -723,6 +728,7 @@ static void ses_match_nvme_to_enclosure(struct enclosure_device *edev, struct pc
 			   ((u64)PCI_SLOT(pdev->devfn) << 8) |
 			   PCI_FUNC(pdev->devfn);
 		efd.dev = &pdev->dev;
+		efd.protocol = SES_PROTOCOL_PCIE;
 	}
 
 	ses_enclosure_find_by_addr(edev, &efd);
@@ -735,6 +741,7 @@ static void ses_match_to_enclosure(struct enclosure_device *edev,
 	struct scsi_device *edev_sdev = to_scsi_device(edev->edev.parent);
 	struct efd efd = {
 		.addr = 0,
+		.protocol = -1,
 	};
 
 	if (refresh)
@@ -742,8 +749,10 @@ static void ses_match_to_enclosure(struct enclosure_device *edev,
 
 	if (scsi_is_sas_rphy(sdev->sdev_target->dev.parent)) {
 		efd.addr = sas_get_address(sdev);
+		efd.protocol = SCSI_PROTOCOL_SAS;
 	} else if (scsi_is_ata(sdev)) {
 		efd.addr = sdev->host->host_no + 1;
+		efd.protocol = SCSI_PROTOCOL_ATA;
 	} else {
 		const unsigned char *d;
 		const struct scsi_vpd *vpd_pg83;
@@ -760,6 +769,7 @@ static void ses_match_to_enclosure(struct enclosure_device *edev,
 				if (piv && code_set == 1 && assoc == 1 && proto ==
 				    SCSI_PROTOCOL_SAS && type == 3 && len == 8) {
 					efd.addr = get_unaligned_be64(&d[4]);
+					efd.protocol = proto;
 					break;
 				}
 				d += len + 4;
