@@ -118,6 +118,7 @@ static struct dentry *scan_positives(struct dentry *cursor,
 	spin_lock(&dentry->d_lock);
 	while (*p) {
 		struct dentry *d = hlist_entry(*p, struct dentry, d_sib);
+		pr_info("MCG DEBUG: entry = %s\n", d->d_iname);
 		p = &d->d_sib.next;
 		// we must at least skip cursors, to avoid livelocks
 		if (d->d_flags & DCACHE_DENTRY_CURSOR)
@@ -196,10 +197,12 @@ int dcache_readdir(struct file *file, struct dir_context *ctx)
 	struct dentry *cursor = file->private_data;
 	struct dentry *next = NULL;
 	struct hlist_node **p;
-	pr_info("MCG DEBUG: ENTER dcache_readdir for iterate_shared(%pD2)\n",file);
+	pr_info("MCG DEBUG: ENTER dcache_readdir for iterate_shared(%pD2), ctx->pos = %d\n",file, ctx->pos);
 
 	if (!dir_emit_dots(file, ctx))
 		return 0;
+	else /* MCG DEBUG */
+		pr_info("MCG DEBUG: Added . and .., ctx->pos = %d\n", ctx->pos);
 
 	if (ctx->pos == 2)
 		p = &dentry->d_children.first;
@@ -207,6 +210,7 @@ int dcache_readdir(struct file *file, struct dir_context *ctx)
 		p = &cursor->d_sib.next;
 
 	while ((next = scan_positives(cursor, p, 1, next)) != NULL) {
+		pr_info("MCG DEBUG: adding dir entry %s\n", next->d_iname);
 		if (!dir_emit(ctx, next->d_name.name, next->d_name.len,
 			      d_inode(next)->i_ino,
 			      fs_umode_to_dtype(d_inode(next)->i_mode)))
@@ -567,7 +571,6 @@ out_eod:
 static int offset_readdir(struct file *file, struct dir_context *ctx)
 {
 	struct dentry *dir = file->f_path.dentry;
-	pr_info("MCG DEBUG: offset_readdir as iterate_shared(%pD2)\n",file);
 
 	lockdep_assert_held(&d_inode(dir)->i_rwsem);
 
