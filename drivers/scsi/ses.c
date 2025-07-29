@@ -714,6 +714,18 @@ static void ses_enclosure_data_process(struct enclosure_device *edev,
 	kfree(hdr_buf);
 }
 
+static int ses_get_enclosure_pci_domain(struct enclosure_device *edev)
+{
+	struct scsi_device *sdev = to_scsi_device(edev->edev.parent);
+	struct device *dev = scsi_get_device(sdev->host);
+
+	if (dev && dev_is_pci(dev)) {
+		struct pci_dev *pdev = to_pci_dev(dev);
+		return pci_domain_nr(pdev->bus);
+	}
+	return 0;
+}
+
 static void ses_match_nvme_to_enclosure(struct enclosure_device *edev, struct pci_dev *pdev)
 {
 	struct scsi_device *edev_sdev = to_scsi_device(edev->edev.parent);
@@ -724,6 +736,12 @@ static void ses_match_nvme_to_enclosure(struct enclosure_device *edev, struct pc
 
 	ses_enclosure_data_process(edev, edev_sdev, 0);
 	if (pdev->dev.bus == &pci_bus_type) {
+		int enclosure_domain = ses_get_enclosure_pci_domain(edev);
+		int nvme_domain = pci_domain_nr(pdev->bus);
+
+		if (enclosure_domain != nvme_domain)
+			return;
+
 		efd.addr = ((u64)pdev->bus->number << 16) |
 			   ((u64)PCI_SLOT(pdev->devfn) << 8) |
 			   PCI_FUNC(pdev->devfn);
